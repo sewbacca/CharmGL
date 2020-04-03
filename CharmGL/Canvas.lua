@@ -49,6 +49,9 @@ function Canvas:set(x, y, t, f, b)
 	expect(5, f, "string")
 	expect(6, b, "string")
 
+	assert(#t == #f, "Arguments must be the same length")
+	assert(#t == #b, "Arguments must be the same length")
+
 	self.buffer[y] = self.buffer[y] or { }
 	self.buffer[y][x] = {
 		t,
@@ -65,29 +68,11 @@ function Canvas:get(x, y)
 	y = y + self.yoffset
 
 	if not self.buffer[y] or not self.buffer[y][x] then
-		self:set(x, y, self:defaultpixel())
+		return self:defaultpixel()
 	end
 
 	local p = self.buffer[y][x]
 	return p[1], p[2], p[3]
-end
-
-function Canvas:getPtr(x, y)
-	expect(1, self, "table")
-	expect(2, x, "number")
-	expect(3, y, "number")
-
-	-- Creating closures is slow
-	if self.ptrbuffer[x] and self.ptrbuffer[x][y] then
-		return self.ptrbuffer[x][y]
-	end
-
-	self.ptrbuffer[x][y] = function()
-		return self:get(x, y)
-	end
-
-	return self.ptrbuffer[x][y]
-
 end
 
 --- There will be at most one single handle to each canvas!!!

@@ -1,48 +1,13 @@
 
+shell.run("/load_controls")
 local charmgl = require "CharmGL"
-local Widget = require "CharmGL.Widget"
+local controls = require "CharmGL.controls"
 
 ---@type Widget
-local node = Widget:new()
+local root = controls.Desktop:new()
 ---@type Widget
-local move = Widget:new()
+local window = controls.Window:new(1, 1, 10, 10)
 
-node.children = {
-	move
-}
+root:append(window)
 
-function node:update(width, height)
-	term.setBackgroundColor(colors.white)
-	term.clear()
-end
-
-function move:update(w, h)
-	term.setBackgroundColor(colors.lime)
-	term.clear()
-end
-
-function node:on(e, key, x, y)
-	if e:match "mouse" then
-		move.horizontalAlignment = "left"
-		move.verticalAlignment = "top"
-
-		if key == 1 then
-			move.left = x - 1
-			move.top = y - 1
-		elseif key == 3 then
-			move.width = x - move.left
-			move.height = y - move.top
-		end
-	elseif e == "key" then
-		if key == keys.f then
-			move.horizontalAlignment = "both"
-			move.verticalAlignment = "both"
-			move.left = 0
-			move.right = 0
-			move.top = 0
-			move.bottom = 0
-		end
-	end
-end
-
-charmgl.run(charmgl.createFrame(node))
+charmgl.run(root, charmgl.screens.term)

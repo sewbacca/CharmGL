@@ -1,153 +1,192 @@
 
-local class = require "CharmGL.class"
-local Widget = require "CharmGL.Widget"
-local Canvas = require "CharmGL.Canvas"
-
 ---@module charmgl
 local charmgl = { }
 
-charmgl.input = {
-	os = os.pullEvent
+charmgl.screens = {
+	term = {
+		output = term.native(),
+		input = os.pullEvent
+	}
 }
 
-charmgl.output = {
-	os = term.native()
-}
+--- Updating loop for widgets
+---@param input table
+---@param output table
+function charmgl.run(toplevel, screen)
+	local input, output = screen.input, screen.output
 
----@param root Widget
----@return Frame
-function charmgl.createFrame(root)
-	---@class Frame
-	local frame = { }
-
-	local canvases = { }
 	local bounds = { }
+	local updated = { }
 
-	local width, height = 0, 0
-
-	local function gather(node, w, h)
-		canvases[node] = canvases[node] or Canvas:new()
-		bounds[node] = node:bounds(w, h)
-		local bounds = bounds[node]
-
+	local function getPixel(node, x, y)
 		for i = 1, #node.children do
-			gather(node.children[i], bounds.width, bounds.height)
-		end
-	end
+			local child = node.children[i]
 
-	function frame.init(w, h)
-		width, height = w, h
-		gather(root, w, h)
-	end
-
-
-	local function pass(node, event, btn, x, y, ...)
-		if node.on then
-			node:on(event, btn, x, y, ...)
-		end
-
-		if event:match "monitor" or event:match "mouse" then
-			for i = 1, #node.children do
-				local child = node.children[i]
-
+			if child.visible then
 				local bounds = bounds[child]
 
 				local xStart, xEnd = bounds.x, bounds.x + bounds.width - 1
 				local yStart, yEnd = bounds.y, bounds.y + bounds.height - 1
 
 				if x >= xStart and x <= xEnd and y >= yStart and y <= yEnd then
-					return pass(child, event, btn, x - xStart + 1, y - yStart + 1, ...)
+					return getPixel(child, x - xStart + 1, y - yStart + 1)
 				end
 			end
-		else
-			for i = 1, #node.children do
-				pass(node.children[i], event, btn, x, y, ...)
-			end
 		end
+
+		return node.canvas:get(x, y)
 	end
 
-	function frame.passEvent(event, ...)
-		pass(root, event, ...)
-	end
-
-	local function update(node, w, h)
-		local bounds = bounds[node]
-
-		local oldTerm = term.redirect(canvases[node]:handle(bounds.width, bounds.height))
-		node:update()
-		term.redirect(oldTerm)
-
-		for i = 1, #node.children do
-			update(node.children[i], bounds.width, bounds.height)
-		end
-	end
-
-	function frame.update()
-		update(root, width, height)
-	end
-
-	local function get(node, x, y)
+	local function onTop(node, x, y)
 		for i = 1, #node.children do
 			local child = node.children[i]
 
-			local bounds = bounds[child]
+			if child.visible then
+				local bounds = bounds[child]
 
-			local xStart, xEnd = bounds.x, bounds.x + bounds.width - 1
-			local yStart, yEnd = bounds.y, bounds.y + bounds.height - 1
+				local xStart, xEnd = bounds.x, bounds.x + bounds.width - 1
+				local yStart, yEnd = bounds.y, bounds.y + bounds.height - 1
 
-			if x >= xStart and x <= xEnd and y >= yStart and y <= yEnd then
-				return get(child, x - xStart + 1, y - yStart + 1)
+				if x >= xStart and x <= xEnd and y >= yStart and y <= yEnd then
+					return child
+				end
 			end
 		end
 
-		return canvases[node]:get(x, y)
+		return nil
 	end
 
-	function frame.changedLines()
-		local changedLines = { }
+	local function boundaries(node, parentWidth, parentHeight)
+		if bounds[node] or not node.visible then -- Prevent loopiloops
+			return
+		end
 
+		local b = node:bounds(parentWidth, parentHeight)
+		bounds[node] = b
+
+		for i = 1, #node.children do
+			boundaries(node.children[i], b.width, b.height)
+		end
+	end
+
+	local function update(node)
+		if updated[node] or not node.visible then -- Prevent loopiloops
+			return
+		end
+		updated[node] = true
+
+		local b = bounds[node]
+
+		if node.update then
+			local old = term.redirect(node.canvas:handle(b.width, b.height))
+			local ok, err = pcall(node.update, node, b.width, b.height)
+			term.redirect(old)
+
+			if not ok then
+				error(err, 0)
+			end
+		end
+
+		for i = 1, #node.children do
+			update(node.children[i])
+		end
+	end
+
+	local function cycle(node)
+		if updated[node] then -- Prevent loopiloops
+			return
+		end
+		updated[node] = true
+
+		if node.cycle then
+			node:cycle()
+		end
+
+		for i = 1, #node.children do
+			cycle(node.children[i])
+		end
+	end
+
+	local function dispatch(node, ...)
+		local event, btn, x, y, arg1, arg2, arg3, arg4 = ...
+
+
+		if event:match "mouse" or event:match "monitor" then
+
+			local b = bounds[node]
+
+			x = x - b.x + 1
+			y = y - b.y + 1
+
+			if event == "mouse_click" then
+				node.focused = onTop(node, x, y)
+			end
+		end
+
+		if node.on then
+			node:on(event, btn, x, y, arg1, arg2, arg3, arg4)
+		end
+
+		if node.focused then
+			dispatch(node.focused, event, btn, x, y, arg1, arg2, arg3, arg4)
+		end
+	end
+
+	local image = { }
+
+	while true do
+		local outputw, outputh = output.getSize()
+
+		-- Update widgets (Boundaries first then content)
+
+		updated = { }
+		cycle(toplevel)
+		bounds = { } -- Recalc bounds
+		boundaries(toplevel, outputw, outputh)
+		local width, height = bounds[toplevel].width, bounds[toplevel].height
+		updated = { }
+		update(toplevel)
+
+		-- Gather changed lines
+
+		local changedLines = { }
 		for y = 1, height do
 			local t, f, b = { }, { }, { }
 
 			for x = 1, width do
-				local _t, _f, _b = get(root, x, y)
+				local _t, _f, _b = getPixel(toplevel, x, y)
 				t[x] = _t
 				f[x] = _f
 				b[x] = _b
 			end
 
-			changedLines[y] = {
+			local line = {
 				table.concat(t),
 				table.concat(f),
 				table.concat(b),
 			}
+
+			local cmpLine = image[y]
+
+			if cmpLine == nil or
+			cmpLine[1] ~= line[1] or
+			cmpLine[2] ~= line[2] or
+			cmpLine[3] ~= line[3] then
+				changedLines[y] = line
+				image[y] = line
+			end
 		end
 
-		return changedLines
-	end
+		-- Render
 
-	return frame
-end
-
---- Updating loop for widgets
----@param frame Frame
----@param input table
----@param output table
-function charmgl.run(frame, input, output)
-	input = input or charmgl.input.os
-	output = output or charmgl.output.os
-
-	while true do
-		frame.init(output.getSize())
-
-		frame.update()
-
-		for y, line in pairs(frame.changedLines()) do
-			output.setCursorPos(1, y)
+		local xStart, yStart = bounds[toplevel].x, bounds[toplevel].y
+		for y, line in pairs(changedLines) do
+			output.setCursorPos(xStart, yStart + y - 1)
 			output.blit(line[1], line[2], line[3])
 		end
 
-		frame.passEvent(input())
+		-- Dispatch events
+		dispatch(toplevel, input())
 	end
 end
 
