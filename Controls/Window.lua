@@ -13,7 +13,7 @@ function Window:init(x, y, width, height)
 	}
 
 	self.cmd_close = controls.Button:new() {
-		text = "X",
+		text = string.char(215),
 		st_normal = {
 			text = colors.white,
 			background = colors.red,
@@ -39,7 +39,7 @@ function Window:init(x, y, width, height)
 	}
 
 	self.cmd_maximize = controls.Button:new() {
-		text = string.char(127),
+		text = "O",
 		st_normal = self.st_cmd_normal,
 		st_pressed = self.st_cmd_pressed,
 		st_boundaries = {
@@ -61,15 +61,15 @@ function Window:init(x, y, width, height)
 	self.maximized = false
 
 	function self.cmd_close.click()
-		self.close = true
+		self:close()
 	end
 
 	function self.cmd_maximize.click()
-		self.maximized = self.maximized == false
+		self:maximize()
 	end
 
 	function self.cmd_minimize.click()
-		self.visible = self.visible == false
+		self:minimize()
 	end
 
 	self:append(self.cmd_close)
@@ -83,27 +83,41 @@ function Window:init(x, y, width, height)
 	self.style:append("window", self.st_window)
 end
 
+function Window:maximize()
+	self.maximized = self.maximized == false
+end
+
+function Window:minimize()
+	self.visible = self.visible == false
+	self.minimized = self.visible
+end
+
+function Window:close()
+	self.closed = true
+end
+
 function Window:on(event, btn, x, y)
 	if event == "mouse_click" then
-		if self.maximized then
+		if self.maximized and y == 1 and x <= self.pwidth - 3 then
 			self.maximized = false
 			self.st_window.x = x - self.x_offset + 1
 			self.st_window.y = y
 			self.dragging = true
-		elseif y ~= 1 or btn ~= 1 or x > self.style.width - 3 then
-			self.dragging = false
-		else
+		elseif not self.maximized and not self.resizing then
+			self.dragging = y == 1 and btn == 1 and x <= self.style.width - 3
 
-			self.dragging = true
 			self.x_offset = x - 1
 		end
 
-		self.x = x
-		self.y = y
+		if not self.maximized and not self.dragging then
+			self.resizing = x == self.style.width and y == self.style.height
+		end
 	end
 end
 
 function Window:bounds(pw, ph)
+	self.pwidth = pw
+
 	if self.maximized then
 		return {
 			x = 1,
