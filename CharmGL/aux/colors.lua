@@ -1,5 +1,6 @@
 
-local hexcolors = setmetatable({
+local transparent = 2^16
+local argb = setmetatable({
 	[ colors.white     ] = '0',
 	[ colors.orange    ] = '1',
 	[ colors.magenta   ] = '2',
@@ -16,23 +17,29 @@ local hexcolors = setmetatable({
 	[ colors.green     ] = 'd',
 	[ colors.red       ] = 'e',
 	[ colors.black     ] = 'f',
+	[ transparent      ] = '#',
 }, {
 	__index = function (_, k)
 		error("Key " .. tostring(k) .. " (type " .. type(k) .. ") not found inside constant map", 2)
 	end
 })
 
--- Make it bidirectional
+argb.white = colors.white
+argb.orange = colors.orange
+argb.magenta = colors.magenta
+argb.lightBlue = colors.lightBlue
+argb.yellow = colors.yellow
+argb.lime = colors.lime
+argb.pink = colors.pink
+argb.gray = colors.gray
+argb.lightGray = colors.lightGray
+argb.cyan = colors.cyan
+argb.purple = colors.purple
+argb.blue = colors.blue
+argb.brown = colors.brown
+argb.green = colors.green
+argb.red = colors.red
+argb.black = colors.black
+argb.transparent = transparent
 
-local bidirectionalcolors = { }
-for k, v in pairs(hexcolors) do
-	bidirectionalcolors[v] = k
-end
-
--- Merge
-
-for k, v in pairs(bidirectionalcolors) do
-	hexcolors[k] = v
-end
-
-return hexcolors
+return argb
